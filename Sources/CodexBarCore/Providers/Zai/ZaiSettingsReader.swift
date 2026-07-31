@@ -13,7 +13,19 @@ public struct ZaiSettingsReader: Sendable {
         environment: [String: String] = ProcessInfo.processInfo.environment) -> String?
     {
         if let token = self.cleaned(environment[apiTokenKey]) { return token }
-        return nil
+        return self.configFileAPIKey()
+    }
+
+    /// Reads the `apiKey` for the `.zai` provider from the CodexBar config file
+    /// (`~/.config/codexbar/config.json` or legacy `~/.codexbar/config.json`). This lets
+    /// the menu-bar app resolve the token without `Z_AI_API_KEY` in its environment
+    /// (GUI apps launched from Dock/Spotlight do not inherit shell env vars). The
+    /// environment variable still wins when set.
+    static func configFileAPIKey(
+        store: CodexBarConfigStore = CodexBarConfigStore()) -> String?
+    {
+        guard let config = try? store.load() else { return nil }
+        return config.providerConfig(for: .zai)?.sanitizedAPIKey
     }
 
     public static func apiHost(

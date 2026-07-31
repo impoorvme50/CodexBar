@@ -19,7 +19,17 @@ public enum KimiSettingsReader {
                 return value
             }
         }
-        return nil
+        return self.configFileAPIKey()
+    }
+
+    /// Reads the Kimi Code API key for `.kimi` from the CodexBar config file, so the
+    /// menu-bar app resolves it without env vars (GUI apps launched from Dock/Spotlight
+    /// do not inherit shell env vars).
+    static func configFileAPIKey(
+        store: CodexBarConfigStore = CodexBarConfigStore()) -> String?
+    {
+        guard let config = try? store.load() else { return nil }
+        return config.providerConfig(for: .kimi)?.sanitizedAPIKey
     }
 
     public static func codeAPIBaseURL(

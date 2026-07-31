@@ -33,7 +33,17 @@ public struct AlibabaCodingPlanSettingsReader: Sendable {
         for key in self.apiTokenEnvironmentKeys {
             if let token = self.cleaned(environment[key]) { return token }
         }
-        return nil
+        return self.configFileAPIToken()
+    }
+
+    /// Reads the Alibaba/Bailian API token for `.alibaba` from the CodexBar config file,
+    /// so the menu-bar app resolves it without env vars (GUI apps launched from
+    /// Dock/Spotlight do not inherit shell env vars).
+    static func configFileAPIToken(
+        store: CodexBarConfigStore = CodexBarConfigStore()) -> String?
+    {
+        guard let config = try? store.load() else { return nil }
+        return config.providerConfig(for: .alibaba)?.sanitizedAPIKey
     }
 
     public static func hostOverride(

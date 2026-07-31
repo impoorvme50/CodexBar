@@ -52,15 +52,47 @@ public struct DoubaoSettingsReader: Sendable {
     public static func codingPlanCredentials(
         environment: [String: String] = ProcessInfo.processInfo.environment) -> DoubaoCodingPlanCredentials?
     {
-        guard let accessKeyID = self.accessKeyID(environment: environment),
-              let secretAccessKey = self.secretAccessKey(environment: environment)
-        else {
+        let accessKeyID = self.accessKeyID(environment: environment)
+        let secretAccessKey = self.secretAccessKey(environment: environment)
+        // Environment variables win when set; otherwise fall back to the CodexBar config
+        // file so the menu-bar app can resolve credentials without env vars (GUI apps
+        // launched from Dock/Spotlight do not inherit shell env vars).
+        let resolvedAccessKeyID = accessKeyID ?? self.configFileAPIKey()
+        let resolvedSecretAccessKey = secretAccessKey ?? self.configFileSecretKey()
+        guard let resolvedAccessKeyID, let resolvedSecretAccessKey else {
             return nil
         }
+        let region = self.firstValue(in: environment, keys: self.regionEnvironmentKeys)
+            ?? self.configFileRegion()
+            ?? self.defaultRegion
         return DoubaoCodingPlanCredentials(
-            accessKeyID: accessKeyID,
-            secretAccessKey: secretAccessKey,
-            region: self.region(environment: environment))
+            accessKeyID: resolvedAccessKeyID,
+            secretAccessKey: resolvedSecretAccessKey,
+            region: region)
+    }
+
+    /// Reads the Volcengine AccessKey ID for `.doubao` from the CodexBar config file.
+    static func configFileAPIKey(
+        store: CodexBarConfigStore = CodexBarConfigStore()) -> String?
+    {
+        guard let config = try? store.load() else { return nil }
+        return config.providerConfig(for: .doubao)?.sanitizedAPIKey
+    }
+
+    /// Reads the Volcengine Secret Access Key for `.doubao` from the CodexBar config file.
+    static func configFileSecretKey(
+        store: CodexBarConfigStore = CodexBarConfigStore()) -> String?
+    {
+        guard let config = try? store.load() else { return nil }
+        return config.providerConfig(for: .doubao)?.sanitizedSecretKey
+    }
+
+    /// Reads the region for `.doubao` from the CodexBar config file.
+    static func configFileRegion(
+        store: CodexBarConfigStore = CodexBarConfigStore()) -> String?
+    {
+        guard let config = try? store.load() else { return nil }
+        return config.providerConfig(for: .doubao)?.sanitizedRegion
     }
 
     private static func firstValue(in environment: [String: String], keys: [String]) -> String? {

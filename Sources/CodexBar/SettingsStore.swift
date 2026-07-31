@@ -876,11 +876,20 @@ extension SettingsStore {
         self.providerConfigRevisions[provider, default: 0]
     }
 
+    /// Provider allowlist for this customized build: only the coding-plan platforms
+    /// we track (Zhipu GLM, Kimi, Bailian Coding/Token plans, Volcano ARK) are surfaced
+    /// anywhere — sidebar, menu bar, background work. The other built-in providers stay
+    /// registered (keeping upstream rebases conflict-free) but are hidden by this guard.
+    static let visibleProviders: Set<UsageProvider> = [
+        .zai, .kimi, .alibaba, .alibabatokenplan, .doubao,
+    ]
+
     func orderedProviders() -> [UsageProvider] {
         if self.providerOrder.isEmpty {
             self.updateProviderState(config: self.configSnapshot)
         }
-        return self.providerOrder
+        let allowlist = Self.visibleProviders
+        return self.providerOrder.filter { allowlist.contains($0) }
     }
 
     func moveProvider(fromOffsets: IndexSet, toOffset: Int) {
@@ -903,7 +912,10 @@ extension SettingsStore {
 
     func enabledProvidersOrdered(metadataByProvider: [UsageProvider: ProviderMetadata]) -> [UsageProvider] {
         _ = metadataByProvider
-        return self.orderedProviders().filter { self.providerEnablement[$0] ?? false }
+        let allowlist = Self.visibleProviders
+        return self.orderedProviders().filter {
+            allowlist.contains($0) && (self.providerEnablement[$0] ?? false)
+        }
     }
 
     func setProviderEnabled(provider: UsageProvider, metadata _: ProviderMetadata, enabled: Bool) {

@@ -98,9 +98,10 @@ struct SettingsSidebarView: View {
         guard self.settings.providersSortedAlphabetically else {
             return self.settings.orderedProviders()
         }
+        let allowlist = SettingsStore.visibleProviders
         return CodexBarConfig.alphabeticalProviderOrder(enablement: { provider in
             self.settings.isProviderEnabled(provider: provider, metadata: self.store.metadata(for: provider))
-        })
+        }).filter { allowlist.contains($0) }
     }
 
     private var filteredProviders: [UsageProvider] {
