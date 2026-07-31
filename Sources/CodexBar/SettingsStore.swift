@@ -881,7 +881,7 @@ extension SettingsStore {
     /// anywhere — sidebar, menu bar, background work. The other built-in providers stay
     /// registered (keeping upstream rebases conflict-free) but are hidden by this guard.
     static let visibleProviders: Set<UsageProvider> = [
-        .zai, .kimi, .alibaba, .alibabatokenplan, .doubao,
+        .zai, .kimi, .alibaba, .alibabatokenplan, .doubao, .codex,
     ]
 
     func orderedProviders() -> [UsageProvider] {

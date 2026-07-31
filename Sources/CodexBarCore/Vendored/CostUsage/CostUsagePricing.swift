@@ -246,6 +246,41 @@ enum CostUsagePricing {
             priorityCacheWriteInputCostPerToken: 2.5e-6),
     ]
 
+    /// Built-in GLM (Zhipu/BigModel) pricing for the .zai provider. Prices are per-token
+    /// in USD, derived from the official per-million-token rates:
+    ///   GLM-5.2 — input ¥8/1M ($1.12/1M), output ¥28/1M ($3.92/1M), cache-read ~$0.26/1M.
+    ///   GLM-4.6 — input ~¥5/1M ($0.70/1M), output ~¥14/1M ($1.96/1M).
+    /// Rates use CodexPricing (same arithmetic shape) and reuse the private codexCostUSD helper.
+    /// Sources: https://bigmodel.cn/pricing (CN¥) converted at ~7.15 CNY/USD.
+    private static let zai: [String: CodexPricing] = [
+        "glm-4.6": CodexPricing(
+            inputCostPerToken: 0.70e-6,
+            outputCostPerToken: 1.96e-6,
+            cacheReadInputCostPerToken: 0.10e-6,
+            displayLabel: nil),
+        "glm-5.2": CodexPricing(
+            inputCostPerToken: 1.12e-6,
+            outputCostPerToken: 3.92e-6,
+            cacheReadInputCostPerToken: 0.26e-6,
+            displayLabel: nil),
+    ]
+
+    static func zaiBuiltInPricingFingerprint() -> String {
+        var parts: [String] = []
+        for model in self.zai.keys.sorted() {
+            guard let pricing = self.zai[model] else { continue }
+            parts.append([
+                "model=\(model)",
+                self.optionalPricingFingerprint(pricing.inputCostPerToken),
+                self.optionalPricingFingerprint(pricing.outputCostPerToken),
+                self.optionalPricingFingerprint(pricing.cacheReadInputCostPerToken),
+                self.optionalPricingFingerprint(pricing.cacheWriteInputCostPerToken),
+                pricing.displayLabel ?? "nil",
+            ].joined(separator: "|"))
+        }
+        return parts.joined(separator: "\n")
+    }
+
     static func codexBuiltInPricingFingerprint() -> String {
         var parts = ["priorityInputTokenLimit=\(self.codexPriorityInputTokenLimit)"]
         for model in self.codex.keys.sorted() {
@@ -455,6 +490,7 @@ enum CostUsagePricing {
 
     private static let codexModelsDevProviderID = "openai"
     private static let claudeModelsDevProviderID = "anthropic"
+    private static let zaiModelsDevProviderID = "zhipu"
 
     static func normalizeCodexModel(_ raw: String) -> String {
         var trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -487,6 +523,51 @@ enum CostUsagePricing {
     static func codexDisplayLabel(model: String) -> String? {
         let key = self.normalizeCodexModel(model)
         return self.codex[key]?.displayLabel
+    }
+
+    /// Normalizes a Zhipu/BigModel GLM model identifier to the canonical pricing key.
+    /// Handles `GLM-5.2`, `glm-5.2`, `builtin:bigmodel-coding-plan/GLM-5.2`, dated suffixes.
+    static func normalizeZaiModel(_ raw: String) -> String {
+        var trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Strip provider prefix like "builtin:bigmodel-coding-plan/"
+        if let slash = trimmed.lastIndex(of: "/") {
+            let after = String(trimmed[trimmed.index(after: slash)...])
+            if !after.isEmpty { trimmed = after }
+        }
+        let lowercased = trimmed.lowercased()
+        // Map known GLM variants to pricing keys. Accept e.g. "GLM-5.2", "glm-5.2".
+        for key in self.zai.keys {
+            if lowercased == key || lowercased.hasPrefix(key + "-") || lowercased.hasPrefix(key + "_") {
+                return key
+            }
+        }
+        return lowercased
+    }
+
+    static func zaiDisplayLabel(model: String) -> String? {
+        let key = self.normalizeZaiModel(model)
+        return self.zai[key]?.displayLabel
+    }
+
+    /// Computes USD cost for a Zhipu/BigModel GLM model from token counts, using the built-in
+    /// pricing table. Falls back to nil when the model is unknown.
+    static func zaiCostUSD(
+        model: String,
+        inputTokens: Int,
+        cachedInputTokens: Int,
+        outputTokens: Int,
+        cacheWriteInputTokens: Int = 0) -> Double?
+    {
+        let key = self.normalizeZaiModel(model)
+        guard let pricing = self.zai[key] else { return nil }
+        // GLM logs cacheRead/cacheWrite as disjoint counts (like Pi), so reconstruct total
+        // input for the CodexPricing arithmetic which expects cached/write as subsets.
+        return self.codexCostUSD(
+            pricing: pricing,
+            inputTokens: inputTokens,
+            cachedInputTokens: cachedInputTokens,
+            cacheWriteInputTokens: cacheWriteInputTokens,
+            outputTokens: outputTokens)
     }
 
     static func normalizeClaudeModel(_ raw: String) -> String {

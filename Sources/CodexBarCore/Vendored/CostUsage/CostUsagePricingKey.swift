@@ -34,6 +34,22 @@ enum CostUsagePricingKey {
         return "\(prefix)-\(self.sha256Hex(Data(parts.joined(separator: "\n").utf8)))"
     }
 
+    /// Pricing cache key for the .zai (GLM) cost scanner. Built-in pricing only (models.dev has
+    /// no GLM entry), so the fingerprint is just the formula version + built-in GLM table hash.
+    static func zai(
+        formulaVersion: Int,
+        parserHash: String? = nil) -> String
+    {
+        var parts = [
+            "costFormulaVersion=\(formulaVersion)",
+            "builtInPricing:\n\(CostUsagePricing.zaiBuiltInPricingFingerprint())",
+        ]
+        if let parserHash {
+            parts.append("parserHash=\(parserHash)")
+        }
+        return "builtin-glm-\(self.sha256Hex(Data(parts.joined(separator: "\n").utf8)))"
+    }
+
     private static func modelsDevPricingFingerprint(
         _ catalog: ModelsDevCatalog,
         providerIDs: Set<String>) -> String

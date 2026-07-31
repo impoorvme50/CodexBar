@@ -226,6 +226,8 @@ public struct CostUsageFetcher: Sendable {
         scannerOptions overrideScannerOptions: CostUsageScanner.Options? = nil,
         piScannerOptions overridePiScannerOptions: PiSessionCostScanner
             .Options? = nil,
+        zaiScannerOptions overrideZaiScannerOptions: ZCodeCostScanner
+            .Options? = nil,
         modelsDevClient: ModelsDevClient = ModelsDevClient(),
         retryUnknownPricing: Bool = true) async throws -> CostUsageTokenSnapshot
     {
@@ -280,6 +282,16 @@ public struct CostUsageFetcher: Sendable {
             resolvedPiOptions.refreshMinIntervalSeconds = 0
         }
         let piOptions = resolvedPiOptions
+
+        var resolvedZaiOptions = overrideZaiScannerOptions ?? ZCodeCostScanner.Options()
+        if resolvedZaiOptions.cacheRoot == nil {
+            resolvedZaiOptions.cacheRoot = options.cacheRoot
+        }
+        resolvedZaiOptions.calendar = options.calendar
+        if forceRefresh || bypassScannerDebounce {
+            resolvedZaiOptions.refreshMinIntervalSeconds = 0
+        }
+        let zaiOptions = resolvedZaiOptions
 
         try Task.checkCancellation()
         // The corpus scans below are synchronous and can run for minutes on large session
@@ -347,6 +359,17 @@ public struct CostUsageFetcher: Sendable {
                     piDaily = piReport
                 }
                 daily = CostUsageDailyReport.merged([daily, piReport])
+            }
+            if provider == .zai {
+                let zaiReport = try ZCodeCostScanner.loadDailyReportCancellable(
+                    provider: provider,
+                    since: since,
+                    until: now,
+                    now: now,
+                    options: zaiOptions,
+                    checkCancellation: checkCancellation)
+                try checkCancellation()
+                daily = CostUsageDailyReport.merged([daily, zaiReport])
             }
             if provider == .codex {
                 projects = Self.mergedProjectBreakdowns(
@@ -586,6 +609,20 @@ public struct CostUsageFetcher: Sendable {
                 }
             }
 
+            if let zaiResult = ZCodeCostScanner.loadCachedDailyReportResult(
+                provider: .zai,
+                since: since,
+                until: until,
+                now: now,
+                cacheRoot: options.cacheRoot,
+                calendar: options.calendar)
+            {
+                reports.append(zaiResult.report)
+                if let zaiLastScanAt = zaiResult.lastScanAt {
+                    scanTimes.append(zaiLastScanAt)
+                }
+            }
+
             guard !reports.isEmpty else { return nil }
             // updatedAt keeps the caches' real (oldest) scan time; stamping the hydration time
             // would let stale token rows inherit app-start freshness (#1964). lastRefreshAt
@@ -609,7 +646,7 @@ public struct CostUsageFetcher: Sendable {
     /// macOS-only because it reuses the macOS Cursor session resolution.
     static func supportsTokenSnapshot(_ provider: UsageProvider) -> Bool {
         switch provider {
-        case .codex, .claude, .vertexai, .bedrock:
+        case .codex, .claude, .vertexai, .bedrock, .zai:
             return true
         case .cursor:
             #if os(macOS)

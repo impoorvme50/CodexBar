@@ -32,8 +32,8 @@ public enum ZaiProviderDescriptor {
                     ProviderColor(hex: 0xDFE2E7),
                 ]),
             tokenCost: ProviderTokenCostConfig(
-                supportsTokenCost: false,
-                noDataMessage: { "z.ai cost summary is not supported." }),
+                supportsTokenCost: true,
+                noDataMessage: { "z.ai cost summary is not available." }),
             fetchPlan: .apiToken(
                 strategyID: "zai.api",
                 resolveToken: { ProviderTokenResolver.zaiToken(environment: $0) },
